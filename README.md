@@ -17,7 +17,7 @@ Simulation techniques in the thesis include neighbor and bending springs, repuls
 | Pull under | With a part selected, start the stroke on the far side of a rope. The dotted line shows the part that passes under. |
 | Bight | Select the middle of a rope, then draw. |
 | Move | Drag any part of a rope. |
-| Fix / unfix | Double-click a part (red marker; purple when it is also the selected part). |
+| Fix/unfix | Double-click a part (red marker; purple when it is also the selected part). |
 | Cut | Right-click the rope, or the Cut tool. |
 | Loosen | Double-click and hold in a gap, or the Loosen tool. |
 | Tighten | Pulls the ends of the selected rope apart, or with nothing selected the ends of every rope away from the other ropes and poles, until the knot jams. While it runs the same button reads Pause. Fixed parts stay put. |
