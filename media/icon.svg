@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- S for Sketch, drawn in rope. One end is fixed (red), the other selected
+       (blue). A sketched line extends the rope from the selected end: a dotted
+       gap that passes under the rope, then a line that passes over it. -->
+  <rect width="64" height="64" rx="14" fill="#1c1e22"/>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M19.5 46.5 L39.5 24.5" stroke="#eceef1" stroke-opacity="0.6" stroke-width="2.4" stroke-dasharray="0.1 3.6"/>
+    <path d="M45 18 C41 8.5 21 8.5 20 21 C19 33 45 31 44 43 C43 55.5 23 55.5 19.5 46.5" stroke="#e6cda3" stroke-width="6.4"/>
+    <path d="M39.5 24.5 C40.5 18.5 35.5 11.5 27 6.5" stroke="#eceef1" stroke-opacity="0.65" stroke-width="2.8"/>
+  </g>
+  <circle cx="45" cy="18" r="4.6" fill="#e5484d"/>
+  <circle cx="19.5" cy="46.5" r="4.8" fill="#2f6feb"/>
+</svg>

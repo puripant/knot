@@ -67,6 +67,33 @@ body {
   opacity: 0.5;
 }
 
+#guide, #guide-under {
+  fill: none;
+  stroke: var(--accent);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+#guide-layer { opacity: 0.6; }
+#guide-start, #guide-arrow { fill: var(--accent); }
+
+#coach {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  width: min(340px, calc(100% - 24px));
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+  cursor: default;
+}
+
+#coach p { margin: 0 0 8px; }
+#coach-step { color: var(--accent); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+#coach button { height: 30px; }
+
 #wedge {
   fill: var(--accent);
   fill-opacity: 0.12;
@@ -90,22 +117,39 @@ body {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   padding: 8px 12px;
   background: var(--panel);
   border-bottom: 1px solid var(--line);
 }
 
+/* Buttons and dropdowns share one box. Dropdowns drop the browser's own
+   chrome, which Safari sizes differently from a button, and draw their arrow. */
 button, select {
-  font: inherit;
-  color: inherit;
-  min-height: 34px;
+  box-sizing: border-box;
+  height: 34px;
+  margin: 0;
   padding: 0 12px;
+  font: inherit;
+  line-height: 1;
+  color: inherit;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: transparent;
+  background-color: transparent;
   cursor: pointer;
   white-space: nowrap;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+select {
+  padding-right: 28px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23888' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 10px 6px;
+  text-overflow: ellipsis;
 }
 
 button:hover { border-color: var(--muted); }
@@ -160,12 +204,13 @@ kbd {
 @media (max-width: 720px) {
   #toolbar {
     order: 3;
-    justify-content: center;
     border-bottom: 0;
     border-top: 1px solid var(--line);
     padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
   }
-  button, select { min-height: 44px; padding: 0 10px; }
+  button, select { height: 44px; }
+  button { padding: 0 10px; }
+  select { padding-left: 10px; }
   .select { font-size: 0; gap: 0; }
   .select select { font-size: 14px; }
   #hint { right: 12px; bottom: 8px; font-size: 13px; }

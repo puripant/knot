@@ -10,7 +10,7 @@ No install and no build. The page uses JavaScript modules, so it has to be serve
 npm start
 ```
 
-Then open http://localhost:8080. three.js is loaded from a CDN through the import map in `index.html`; it is the only dependency.
+Then open http://localhost:8080. The hosted copy is at https://puripant.github.io/knot/. three.js is loaded from a CDN through the import map in `index.html`; it is the only dependency.
 
 ```bash
 npm test
@@ -50,7 +50,26 @@ The Examples menu ties:
 
 Each is laid out in `src/sim/examples.js` the way it looks when tied loosely by hand, as control points with a height that says which strand is over at a crossing; the strokes are worked out from that.
 
+In the two-rope examples the second rope takes the other rope texture so the two can be told apart. Ropes you draw yourself all share the look chosen under View.
+
 A pole is a rigid rope: every sphere is fixed for good and it cannot be picked, dragged or cut. Poles only come from the examples for now.
+
+## Tutorial
+
+On the first visit a tutorial card walks through tying an overhand knot: trace three guide lines, then press Tighten. A stroke that strays from the guide is taken back. It can be skipped at any time and started again from More → Tutorial. Whether it has been seen is kept in the browser's local storage.
+
+## Export
+
+Under More → Export:
+
+- **Picture (PNG)** is the current view.
+- **Step-by-step sheet (PNG)** is one numbered tile per stroke, captioned with what the stroke did (for example "Pass under, then over"), plus the finished knot. Steps are recorded for your own strokes and for the examples; undo removes them again.
+- **Video** records the view until stopped, for at most 30 seconds (MP4 or WebM, whichever the browser records).
+- **3D model** is the rope meshes as GLB, with colours and textures, or as OBJ, shape only. The GLB exporter is fetched from the CDN the first time it is used.
+
+Each export opens the device's share sheet where the browser can share files, and is saved to the downloads folder otherwise.
+
+For link previews, `index.html` carries Open Graph and Twitter card tags pointing at `media/og-image.png`, and `media/icon.svg` is the page icon. Preview crawlers need absolute URLs, so the `og:url`, `og:image` and canonical tags name the hosted address, https://puripant.github.io/knot/. Change them there if the app moves.
 
 ## Layout
 
@@ -60,7 +79,10 @@ A pole is a rigid rope: every sphere is fixed for good and it cannot be picked, 
   - `physics.js` the rope simulation and automatic tightening
   - `examples.js` example knot diagrams, tied with the same strokes a user would draw
 - `src/render.js` three.js view: rope textures, ribbon and sphere representations
+- `src/export.js` pictures, step sheet, video recording, OBJ and GLB, share or save
+- `src/tutorial.js` the first-run tutorial
 - `src/app.js` pointer input, toolbar, frame loop
+- `media/` link-preview image and page icon
 - `legacy/` the 2016–17 draft, kept for reference
 
 ## Where the simulation differs from the thesis

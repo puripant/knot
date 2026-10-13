@@ -78,7 +78,8 @@ function lineBetween(a, b, spacing) {
 // Depth inference. `path` is [{ x, y, mode: 'over' | 'under' }] in view space,
 // `obstacles` are existing spheres [{ x, y, z, da, db }] where da / db are their
 // index distances along the rope from the path's start / end anchor (Infinity
-// when unrelated). Returns the view-space depth of every path point.
+// when unrelated). Returns { z, over, under }: the view-space depth of every
+// path point, and whether the path passes over or under anything.
 export function assignDepth(path, obstacles, { radius, za = 0, zb = 0 }) {
   const n = path.length;
   const reach = REACH * radius, reach2 = reach * reach;
@@ -87,18 +88,22 @@ export function assignDepth(path, obstacles, { radius, za = 0, zb = 0 }) {
   const lo = new Float64Array(n).fill(-Infinity);
   const hi = new Float64Array(n).fill(Infinity);
   const earlier = Array.from({ length: n }, () => []);
+  let over = false, under = false;
   for (let j = 0; j < n; j++) {
     const p = path[j];
     for (const o of obstacles) {
       if (o.da + j + 1 < INDEX_GAP || o.db + (n - j) < INDEX_GAP) continue;
       const d2 = (o.x - p.x) ** 2 + (o.y - p.y) ** 2;
       if (d2 >= reach2) continue;
-      if (p.mode === 'over') lo[j] = Math.max(lo[j], o.z + need(d2));
-      else hi[j] = Math.min(hi[j], o.z - need(d2));
+      if (p.mode === 'over') { lo[j] = Math.max(lo[j], o.z + need(d2)); over = true; }
+      else { hi[j] = Math.min(hi[j], o.z - need(d2)); under = true; }
     }
     for (let i = 0; i <= j - INDEX_GAP; i++) {
       const d2 = (path[i].x - p.x) ** 2 + (path[i].y - p.y) ** 2;
-      if (d2 < reach2) earlier[j].push([i, need(d2)]);
+      if (d2 < reach2) {
+        earlier[j].push([i, need(d2)]);
+        if (p.mode === 'over') over = true; else under = true;
+      }
     }
   }
 
@@ -133,7 +138,7 @@ export function assignDepth(path, obstacles, { radius, za = 0, zb = 0 }) {
     for (let i = 0; i < n; i++) z[i] = base[i] + above[i] - below[i];
   }
   enforce();
-  return z;
+  return { z, over, under };
 }
 
 // The doubled path of a bight: out along one side of the stroke, around its
@@ -170,7 +175,10 @@ function bightPath(stroke, a, b, radius, spacing) {
 
 // Lays a rope along `rawStroke` (view-space [x, y] points). With a selection
 // { id, index } the selected rope is extended; otherwise a new rope is made.
-// Returns the new selection, or null if the stroke is too short to be a rope.
+// Returns null if the stroke is too short to be a rope, and otherwise the new
+// selection { id, index } together with what the stroke did: its `kind`
+// ('new', 'head', 'tail' or 'middle') and whether it passed `over` or `under`
+// anything.
 export function applyStroke(world, view, rawStroke, selection) {
   const radius = world.radius, spacing = world.spacing;
   if (rawStroke.length < 2 || pathLength(rawStroke) < 3 * spacing) return null;
@@ -207,7 +215,8 @@ export function applyStroke(world, view, rawStroke, selection) {
     path = [...tag(lineBetween(start, stroke[0], spacing), 'under'), ...tag(stroke, 'over')];
   }
 
-  const z = assignDepth(path, obstacles, { radius, za: start ? start[2] : 0, zb: end ? end[2] : 0 });
+  const { z, over, under } = assignDepth(path, obstacles, { radius, za: start ? start[2] : 0, zb: end ? end[2] : 0 });
+  const did = { kind, over, under };
   const points = path.map((p, i) => [p.x, p.y, z[i]]);
 
   // Space the spheres evenly along the 3-D path, leaving out the anchors.
@@ -218,16 +227,16 @@ export function applyStroke(world, view, rawStroke, selection) {
 
   if (kind === 'new') {
     const created = world.addRope(added);
-    return { id: created.id, index: created.count - 1 };
+    return { id: created.id, index: created.count - 1, ...did };
   }
   if (kind === 'tail') {
     rope.insert(rope.count, added);
-    return { id: rope.id, index: rope.count - 1 };
+    return { id: rope.id, index: rope.count - 1, ...did };
   }
   if (kind === 'head') {
     rope.insert(0, added.reverse());
-    return { id: rope.id, index: 0 };
+    return { id: rope.id, index: 0, ...did };
   }
   rope.insert(selection.index + 1, added);
-  return { id: rope.id, index: selection.index + 1 + (added.length >> 1) };
+  return { id: rope.id, index: selection.index + 1 + (added.length >> 1), ...did };
 }

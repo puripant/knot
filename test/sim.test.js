@@ -49,7 +49,7 @@ test('a stroke becomes an evenly spaced rope in the view plane', () => {
   const selection = applyStroke(world, view, line([-6, 0], [6, 0]), null);
   const rope = world.ropes[0];
   assert.equal(world.ropes.length, 1);
-  assert.deepEqual(selection, { id: rope.id, index: rope.count - 1 });
+  assert.deepEqual(selection, { id: rope.id, index: rope.count - 1, kind: 'new', over: false, under: false });
   assert.ok(Math.abs(rope.count - 41) <= 1);
   for (let i = 0; i < rope.count; i++) assert.equal(rope.point(i)[2], 0);
 });
@@ -71,6 +71,7 @@ test('the connector from a selected end is pulled under', () => {
   applyStroke(world, view, line([-6, 0], [6, 0]), null);
   const end = applyStroke(world, view, line([0, -8], [0, -3]), null);
   const result = applyStroke(world, view, line([0, 3], [0, 8]), end);
+  assert.ok(result.under && !result.over && result.kind === 'tail');
   const rope = world.ropeById(end.id);
   assert.equal(result.index, rope.count - 1);
   let lowest = 0;
@@ -107,7 +108,8 @@ test('a stroke from the middle of a rope pulls out a bight', () => {
 test('depth inference orders a self-crossing stroke', () => {
   const path = [...line([-3, 0], [3, 0], 20), ...line([3, 0], [3, 3], 10), ...line([3, 3], [0, 3], 10), ...line([0, 3], [0, -3], 20)]
     .map(([x, y]) => ({ x, y, mode: 'over' }));
-  const z = assignDepth(path, [], { radius: 0.3 });
+  const { z, over, under } = assignDepth(path, [], { radius: 0.3 });
+  assert.ok(over && !under);
   assert.ok(z[10] === 0);
   assert.ok(z[z.length - 11] >= 0.6);
 });

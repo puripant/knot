@@ -2,8 +2,10 @@ import { World } from './sim/world.js';
 import { Physics, Tightener } from './sim/physics.js';
 import { applyStroke, pathLength } from './sim/sketch.js';
 import { toView, toWorld } from './sim/view.js';
-import { EXAMPLES, buildExample, tieExample } from './sim/examples.js';
+import { EXAMPLES, buildExample, strokesFor, tieExample } from './sim/examples.js';
 import { Renderer } from './render.js';
+import { Recorder, canvasBlob, picture, share, stepSheet, toGLB, toOBJ } from './export.js';
+import { Tutorial } from './tutorial.js';
 
 const STEPS_PER_FRAME = 4;
 const DOUBLE_TAP_MS = 350;
@@ -26,11 +28,15 @@ let gesture = null; // what the active pointer is doing
 let lastTap = null;
 const pointers = new Map();
 const undoStack = [];
+const steps = []; // how the ropes were laid, stroke by stroke: [{ ropes, label }]
+const recorder = new Recorder();
+const tutorial = new Tutorial({ card: $('coach'), step: $('coach-step'), text: $('coach-text'), close: $('coach-close') });
+let notice = null; // a passing message shown in place of the hint
 
 // ---- state changes -------------------------------------------------------
 
 function checkpoint() {
-  undoStack.push({ ropes: world.snapshot(), selection });
+  undoStack.push({ ropes: world.snapshot(), selection, steps: steps.length });
   if (undoStack.length > UNDO_LIMIT) undoStack.shift();
   $('undo').disabled = false;
 }
@@ -40,9 +46,24 @@ function undo() {
   if (!state) return;
   world.restore(state.ropes);
   selection = state.selection;
+  steps.length = Math.min(steps.length, state.steps);
   stopTightening();
   gesture = null;
   $('undo').disabled = undoStack.length === 0;
+  tutorial.undone(world);
+}
+
+function flash(text, seconds = 4) {
+  notice = { text, until: performance.now() + seconds * 1000 };
+}
+
+// Records a stroke as a step of the tying instructions.
+function recordStep(did) {
+  const passes = did.under && did.over ? 'under, then over' : did.under ? 'under' : did.over ? 'over' : '';
+  const label = did.kind === 'new' ? `Lay a rope${passes && `, passing ${passes}`}`
+    : did.kind === 'middle' ? `Pull out a bight${passes && `, passing ${passes}`}`
+      : passes ? `Pass ${passes}` : 'Extend the rope';
+  steps.push({ ropes: world.snapshot(), label });
 }
 
 // One button starts tightening and, while it runs, pauses it again.
@@ -89,6 +110,8 @@ function clearAll() {
   stopTightening();
   world.clear();
   selection = null;
+  steps.length = 0;
+  if (tutorial.active) tutorial.end();
 }
 
 function showExample(id) {
@@ -96,12 +119,72 @@ function showExample(id) {
   if (!example) return;
   checkpoint();
   stopTightening();
+  if (tutorial.active) tutorial.end();
   world.clear();
+  steps.length = 0;
   const built = buildExample(example, world.radius);
   renderer.frame(built.width, built.height);
-  const end = tieExample(world, renderer.view, built);
+  const end = tieExample(world, renderer.view, built, recordStep);
   // With several ropes nothing is selected, so that Tighten pulls them all.
-  selection = world.ropes.filter((rope) => !rope.pole).length === 1 ? end : null;
+  selection = world.ropes.filter((rope) => !rope.pole).length === 1 ? { id: end.id, index: end.index } : null;
+}
+
+// The tutorial ties the overhand example, with its strokes as guide lines.
+function startTutorial() {
+  checkpoint();
+  stopTightening();
+  world.clear();
+  selection = null;
+  steps.length = 0;
+  setTool('sketch');
+  const built = buildExample(EXAMPLES[0], world.radius);
+  renderer.frame(built.width * 1.1, built.height * 1.5);
+  tutorial.begin(strokesFor(built.ropes[0].path, [], world.radius, true));
+}
+
+// ---- export and sharing --------------------------------------------------
+
+// Every export goes to the share sheet where the device has one, and to the
+// downloads folder otherwise.
+async function deliver(blob, name) {
+  const outcome = await share(blob, name, 'A knot I tied');
+  if (outcome === 'saved') flash(`Saved ${name} to your downloads.`);
+}
+
+async function exportAs(kind) {
+  if (!world.ropes.length) return flash('There is nothing to export yet.');
+  try {
+    if (kind === 'png') {
+      await deliver(await canvasBlob(picture(renderer, world)), 'knot.png');
+    } else if (kind === 'steps') {
+      const sheet = stepSheet(renderer, world, [...steps, { ropes: world.snapshot(), label: 'Finished' }]);
+      await deliver(await canvasBlob(sheet), 'knot-steps.png');
+    } else if (kind === 'obj') {
+      await deliver(toOBJ(renderer.exportGroup()), 'knot.obj');
+    } else if (kind === 'glb') {
+      await deliver(await toGLB(renderer.exportGroup()), 'knot.glb');
+    }
+  } catch (error) {
+    console.error(error);
+    flash('The export failed.');
+  }
+}
+
+function showRecording() {
+  $('record-option').textContent = recorder.recording ? 'Stop recording' : 'Video';
+}
+
+async function toggleRecording() {
+  if (!Recorder.supported) return flash('This browser cannot record video.');
+  if (!recorder.recording) {
+    recorder.start();
+    showRecording();
+    return;
+  }
+  const pending = recorder.stop();
+  showRecording();
+  const clip = await pending;
+  await deliver(clip, `knot.${clip.type.includes('mp4') ? 'mp4' : 'webm'}`);
 }
 
 // ---- pointer input -------------------------------------------------------
@@ -222,11 +305,15 @@ function onPointerUp(event) {
     }
     checkpoint();
     const result = applyStroke(world, renderer.view, stroke, selection);
-    if (result) selection = result;
-    else undoStack.pop();
+    if (!result) return void undoStack.pop();
+    selection = { id: result.id, index: result.index };
+    if (tutorial.accept(stroke, world)) recordStep(result);
+    else undo();
   }
 }
 
+// The tutorial card sits on the canvas but is not part of it.
+$('coach').addEventListener('pointerdown', (event) => event.stopPropagation());
 stage.addEventListener('pointerdown', onPointerDown);
 stage.addEventListener('pointermove', onPointerMove);
 stage.addEventListener('pointerup', onPointerUp);
@@ -255,7 +342,10 @@ $('more').addEventListener('change', (event) => {
   event.target.value = '';
   if (action.startsWith('mode:')) setMode(action.slice(5));
   else if (action === 'reset-view') renderer.resetView();
+  else if (action.startsWith('export:')) exportAs(action.slice(7));
+  else if (action === 'record') toggleRecording();
   else if (action === 'clear') clearAll();
+  else if (action === 'tutorial') startTutorial();
   else if (action === 'help') $('help').showModal();
 });
 
@@ -275,6 +365,9 @@ new ResizeObserver(() => renderer.resize()).observe(stage);
 // ---- frame loop ----------------------------------------------------------
 
 function hintText() {
+  if (notice && performance.now() < notice.until) return notice.text;
+  if (recorder.recording) return 'Recording… choose More, then Stop recording, when you are done.';
+  if (tutorial.active) return '';
   if (tightener) return 'Tightening… press Pause to stop.';
   if (gesture?.type === 'loosen') return 'Hold to open the gap.';
   if (tool === 'cut') return 'Tap the rope where it should be cut.';
@@ -286,10 +379,36 @@ function hintText() {
   return `Draw across a strand to go over it; start beyond a strand to go under. ${extras}`;
 }
 
+// The tutorial's guide. The line to draw is solid and lies over the ropes, as
+// the stroke will; the gap from the selected end to its start is dotted and
+// behind them, as the pull-under connector is.
+function drawGuide(width, rope) {
+  const guide = tutorial.guide;
+  $('guide-layer').style.display = guide ? '' : 'none';
+  $('guide-under').style.display = guide && rope ? '' : 'none';
+  if (!guide) return;
+  const points = guide.map((p) => renderer.viewToScreen(p[0], p[1]));
+  $('guide').setAttribute('points', points.map((p) => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' '));
+  $('guide').style.strokeWidth = width * 0.5;
+  const [sx, sy] = points[0], [ex, ey] = points[points.length - 1], [px, py] = points[points.length - 4];
+  for (const [name, value] of Object.entries({ cx: sx, cy: sy, r: width })) $('guide-start').setAttribute(name, value);
+  const length = Math.hypot(ex - px, ey - py) || 1, ux = (ex - px) / length, uy = (ey - py) / length, head = width * 1.6;
+  $('guide-arrow').setAttribute('points', [
+    [ex + ux * head, ey + uy * head], [ex - uy * head * 0.7, ey + ux * head * 0.7], [ex + uy * head * 0.7, ey - ux * head * 0.7],
+  ].map((p) => p.map((v) => v.toFixed(1)).join(',')).join(' '));
+  if (!rope) return;
+  const anchor = toView(renderer.view, ...rope.point(selection.index));
+  const [x1, y1] = renderer.viewToScreen(anchor[0], anchor[1]);
+  for (const [name, value] of Object.entries({ x1, y1, x2: sx, y2: sy })) $('guide-under').setAttribute(name, value);
+  $('guide-under').style.strokeWidth = width * 0.5;
+  $('guide-under').style.strokeDasharray = `${width * 0.1} ${width}`;
+}
+
 function drawOverlay() {
   const stroke = $('stroke'), connector = $('connector'), wedge = $('wedge');
   const width = Math.max(6, 1.2 * world.radius * renderer.pixelsPerUnit);
   const rope = selection && world.ropeById(selection.id);
+  drawGuide(width, rope);
   if (gesture?.type === 'stroke') {
     stroke.setAttribute('points', gesture.points.map((p) => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' '));
     stroke.style.strokeWidth = width;
@@ -330,10 +449,15 @@ function frame() {
     physics.step(world, { handles, cylinder: gesture?.type === 'loosen' ? gesture : null });
     if (tightener) {
       tightener.update(world);
-      if (tightener.done) stopTightening();
+      if (tightener.done) {
+        stopTightening();
+        tutorial.tightened();
+      }
     }
   }
   renderer.draw(world, selection);
+  recorder.capture(renderer);
+  if (recorder.full) toggleRecording();
   drawOverlay();
   $('hint').textContent = hintText();
   $('count').textContent = renderer.mode === 'spheres' && world.sphereCount ? `${world.sphereCount} spheres` : '';
@@ -341,6 +465,7 @@ function frame() {
 }
 
 // For tests and tinkering from the console.
-window.knot = { world, physics, renderer };
+window.knot = { world, physics, renderer, steps, tutorial };
 
 frame();
+if (!Tutorial.seen) startTutorial();

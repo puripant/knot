@@ -98,7 +98,8 @@ export function buildExample(example, radius) {
 }
 
 // Ties a built example into the world, rope by rope and stroke by stroke.
-export function tieExample(world, view, built) {
+// `onStroke` is told what each stroke did, as applyStroke reports it.
+export function tieExample(world, view, built, onStroke) {
   const drawn = [];
   let selection = null;
   for (const spec of built.ropes) {
@@ -110,9 +111,11 @@ export function tieExample(world, view, built) {
     selection = null;
     for (const stroke of strokesFor(spec.path, drawn, world.radius, spec.alternate)) {
       selection = applyStroke(world, view, stroke, selection);
+      onStroke?.(selection);
     }
     drawn.push(spec.path);
     const rope = world.ropeById(selection.id);
+    rope.look = spec.look ?? null;
     for (const [x, y] of spec.fix) {
       let nearest = 0, best = Infinity;
       for (let i = 0; i < rope.count; i++) {
@@ -240,7 +243,8 @@ function fenceWires(wires = 5, periods = 2) {
 
 // `crossings` is how many the finished diagram has; the tests check it.
 // `fix` lists points whose nearest sphere starts out fixed; `pole` marks a
-// rigid pole instead of a rope.
+// rigid pole instead of a rope; `look: 'contrast'` sets a rope apart from the
+// others.
 export const EXAMPLES = [
   { id: 'overhand', name: 'Overhand knot', crossings: 3, ropes: [{ controls: twisted(3), alternate: true }] },
   { id: 'figure-eight', name: 'Figure-eight knot', crossings: 4, ropes: [{ controls: FIGURE_EIGHT, alternate: true }] },
@@ -249,10 +253,10 @@ export const EXAMPLES = [
   { id: 'bowline', name: 'Bowline', crossings: 7, ropes: [{ controls: BOWLINE, fix: [[0.4, -7.5], [1.1, -2.5]] }] },
   {
     id: 'reef', name: 'Reef (square) knot', crossings: 6,
-    ropes: [{ controls: BIGHT_LEFT.map(([x, y], i) => [x, y, REEF_LEFT_HEIGHT[i]]) }, { controls: BIGHT_RIGHT }],
+    ropes: [{ controls: BIGHT_LEFT.map(([x, y], i) => [x, y, REEF_LEFT_HEIGHT[i]]) }, { controls: BIGHT_RIGHT, look: 'contrast' }],
   },
-  { id: 'granny', name: 'Granny knot', crossings: 6, ropes: [{ controls: BIGHT_LEFT }, { controls: GRANNY_RIGHT }] },
-  { id: 'sheet-bend', name: 'Sheet bend', crossings: 7, ropes: [{ controls: SHEET_BIGHT }, { controls: SHEET_END }] },
+  { id: 'granny', name: 'Granny knot', crossings: 6, ropes: [{ controls: BIGHT_LEFT }, { controls: GRANNY_RIGHT, look: 'contrast' }] },
+  { id: 'sheet-bend', name: 'Sheet bend', crossings: 7, ropes: [{ controls: SHEET_BIGHT }, { controls: SHEET_END, look: 'contrast' }] },
   { id: 'clove-hitch', name: 'Clove hitch', crossings: 7, ropes: [{ controls: POLE, pole: true }, { controls: CLOVE_HITCH }] },
   { id: 'cow-hitch', name: 'Cow hitch', crossings: 6, ropes: [{ controls: POLE, pole: true }, { controls: COW_HITCH }] },
   { id: 'chain-link-fence', name: 'Chain-link fence', crossings: 16, ropes: fenceWires() },

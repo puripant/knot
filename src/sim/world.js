@@ -9,6 +9,7 @@ export class Rope {
   constructor(id = nextId++) {
     this.id = id;
     this.pole = false;
+    this.look = null; // an example may give a rope its own look
     this.pos = [];
     this.vel = [];
     this.fixed = [];
@@ -38,6 +39,7 @@ export class Rope {
   slice(from, to, id) {
     const rope = new Rope(id);
     rope.pole = this.pole;
+    rope.look = this.look;
     rope.pos = this.pos.slice(3 * from, 3 * to);
     rope.vel = this.vel.slice(3 * from, 3 * to);
     rope.fixed = this.fixed.slice(from, to);

@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 
 const VIEW_HEIGHT = 24; // world units visible vertically at zoom 1
+const CAMERA_DISTANCE = 500;
+const LIGHT_SLANT = 260; // how far the light sits off the view axis; with the distance, about 27 degrees
 const RADIAL = 12; // tube sides
 const CAP = [30, 60, 90].map((deg) => (deg * Math.PI) / 180);
 
@@ -63,12 +65,18 @@ function braidedMaps() {
   };
 }
 
+// A satin ribbon: smooth along its length, with a slightly darker selvage on
+// each side.
+function ribbonMaps() {
+  return { map: texture((u, v) => grey(v < 0.06 || v > 0.94 ? 0.82 : 1), true) };
+}
+
 // How each view draws a rope: its shape, colour and textures.
 const STYLES = {
   twisted: { shape: 'tube', color: '#e6cda3', maps: twistedMaps, bumpScale: 2.5 },
   braided: { shape: 'tube', color: '#ffffff', maps: braidedMaps, bumpScale: 1.5 },
   plain: { shape: 'tube', color: '#e9e2d0', roughness: 0.6 },
-  ribbon: { shape: 'ribbon', color: '#e6cda3', maps: twistedMaps, bumpScale: 1 },
+  ribbon: { shape: 'ribbon', color: '#c9594b', maps: ribbonMaps, roughness: 0.45 },
   spheres: { shape: 'spheres', color: '#e6cda3', roughness: 0.6 },
   pole: { shape: 'tube', color: '#7d6652', roughness: 0.5 },
 };
@@ -78,7 +86,7 @@ function styleMaterial(mode) {
   if (style.maps && !mapCache.has(mode)) mapCache.set(mode, style.maps());
   return new THREE.MeshStandardMaterial({
     color: style.color, roughness: style.roughness ?? 0.85, metalness: 0, side: THREE.DoubleSide,
-    ...(style.maps ? { ...mapCache.get(mode), bumpScale: style.bumpScale } : {}),
+    ...(style.maps ? { ...mapCache.get(mode), bumpScale: style.bumpScale ?? 1 } : {}),
   });
 }
 
@@ -147,6 +155,8 @@ class RopeVisual {
       this.count = rope.count;
       this.mesh = this.shape === 'spheres' ? this._buildSpheres() : new THREE.Mesh(this._buildGeometry(), this.material);
       this.mesh.frustumCulled = false;
+      // A strand casts its shadow on the strands beneath it.
+      this.mesh.castShadow = this.mesh.receiveShadow = true;
       this.scene.add(this.mesh);
     }
     if (this.shape === 'spheres') this._updateSpheres(rope);
@@ -263,10 +273,21 @@ export class Renderer {
     this.scene = new THREE.Scene();
     this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 2000);
     this.scene.add(this.camera);
-    this.scene.add(new THREE.HemisphereLight(0xffffff, 0x9a9aa6, 0.7));
-    const key = new THREE.DirectionalLight(0xffffff, 2.8);
-    key.position.set(-0.25, 0.35, 1);
-    this.camera.add(key); // the light turns with the view, like a headlamp
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.scene.add(new THREE.HemisphereLight(0xffffff, 0x77777f, 0.75));
+    // One light from the upper left of the screen. It turns with the view, so
+    // an upper strand always drops its shadow down and to the right, on to
+    // whatever passes beneath it.
+    this.light = new THREE.DirectionalLight(0xffffff, 2.7);
+    this.light.position.set(-LIGHT_SLANT * 0.55, LIGHT_SLANT * 0.85, 0);
+    this.light.target.position.set(0, 0, -CAMERA_DISTANCE);
+    this.light.castShadow = true;
+    this.light.shadow.mapSize.set(2048, 2048);
+    this.light.shadow.radius = 4;
+    this.light.shadow.bias = -0.0004;
+    this.light.shadow.normalBias = 0.03;
+    this.camera.add(this.light, this.light.target);
 
     const marker = (color, scale, opacity) => {
       const mesh = new THREE.InstancedMesh(
@@ -275,6 +296,7 @@ export class Renderer {
         256,
       );
       mesh.frustumCulled = false;
+      mesh.receiveShadow = true;
       mesh.count = 0;
       this.scene.add(mesh);
       return mesh;
@@ -314,8 +336,12 @@ export class Renderer {
   _updateCamera() {
     const halfH = VIEW_HEIGHT / 2 / this.zoom, halfW = (halfH * this.width) / this.height;
     Object.assign(this.camera, { left: -halfW, right: halfW, top: halfH, bottom: -halfH });
-    this.camera.position.copy(this.target).add(new THREE.Vector3(0, 0, 500).applyQuaternion(this.camera.quaternion));
+    this.camera.position.copy(this.target).add(new THREE.Vector3(0, 0, CAMERA_DISTANCE).applyQuaternion(this.camera.quaternion));
     this.camera.updateProjectionMatrix();
+    // The shadow map covers what is in view, with room for the light's slant.
+    const reach = Math.max(halfW, halfH) * 1.25, shadow = this.light.shadow.camera;
+    Object.assign(shadow, { left: -reach, right: reach, top: reach, bottom: -reach, near: 1, far: 3 * CAMERA_DISTANCE });
+    shadow.updateProjectionMatrix();
   }
 
   rotate(dxPixels, dyPixels) {
@@ -360,6 +386,32 @@ export class Renderer {
     this.visuals.clear();
   }
 
+  // A pole always looks like a pole. A rope that an example sets apart takes
+  // the other rope texture, as long as the view shows ropes at all.
+  _styleFor(rope) {
+    if (rope.pole) return 'pole';
+    if (rope.look === 'contrast' && STYLES[this.mode].shape === 'tube') return this.mode === 'braided' ? 'twisted' : 'braided';
+    return this.mode;
+  }
+
+  get canvas() {
+    return this.renderer.domElement;
+  }
+
+  // The rope meshes as last drawn, for exporting as a 3-D model.
+  exportGroup() {
+    const group = new THREE.Group();
+    group.name = 'knot';
+    let n = 0;
+    for (const visual of this.visuals.values()) {
+      if (!visual.mesh) continue;
+      const mesh = visual.mesh.clone();
+      mesh.name = `rope-${++n}`;
+      group.add(mesh);
+    }
+    return group;
+  }
+
   // Brings the meshes in line with the world and draws a frame.
   draw(world, selection) {
     const hint = [0, 0, 1];
@@ -369,7 +421,7 @@ export class Renderer {
     for (const rope of world.ropes) {
       seen.add(rope.id);
       let visual = this.visuals.get(rope.id);
-      if (!visual) this.visuals.set(rope.id, visual = new RopeVisual(this.scene, rope.pole ? 'pole' : this.mode, this.radius));
+      if (!visual) this.visuals.set(rope.id, visual = new RopeVisual(this.scene, this._styleFor(rope), this.radius));
       visual.update(rope, hint);
       for (let i = 0; i < rope.count && fixed < 256; i++) {
         if (!rope.fixed[i] || rope.pole) continue;
