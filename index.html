@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="color-scheme" content="light dark">
+  <title>Knot — sketch and tie knots</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script type="importmap">
+    { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js" } }
+  </script>
+</head>
+<body>
+  <main id="stage" aria-label="Knot canvas">
+    <!-- Behind the ropes: the part of a stroke that will be pulled under. -->
+    <svg id="underlay" class="layer" aria-hidden="true">
+      <line id="connector"></line>
+    </svg>
+    <svg id="overlay" class="layer" aria-hidden="true">
+      <polyline id="stroke"></polyline>
+      <circle id="wedge"></circle>
+    </svg>
+    <p id="hint" role="status"></p>
+    <p id="count"></p>
+  </main>
+
+  <nav id="toolbar" aria-label="Tools">
+    <label class="select">Tool
+      <select id="tool">
+        <option value="sketch">Sketch &amp; drag</option>
+        <option value="cut">Cut</option>
+        <option value="loosen">Loosen</option>
+        <option value="rotate">Rotate view</option>
+      </select>
+    </label>
+    <button id="tighten" aria-pressed="false" title="Pull the ends of the rope until the knot jams; press again to pause (T)">Tighten</button>
+    <button id="undo" title="Undo (Ctrl+Z)">Undo</button>
+    <select id="examples" aria-label="Examples">
+      <option value="" selected hidden>Examples</option>
+    </select>
+    <select id="more" aria-label="More">
+      <option value="" selected hidden>More</option>
+      <optgroup label="View">
+        <option value="mode:twisted" data-label="Twisted rope">Twisted rope</option>
+        <option value="mode:braided" data-label="Braided rope">Braided rope</option>
+        <option value="mode:plain" data-label="Plain cord">Plain cord</option>
+        <option value="mode:ribbon" data-label="Ribbon">Ribbon</option>
+        <option value="mode:spheres" data-label="Spheres">Spheres</option>
+        <option value="reset-view">Reset view</option>
+      </optgroup>
+      <optgroup label="Canvas">
+        <option value="clear">Clear</option>
+        <option value="help">Help</option>
+      </optgroup>
+    </select>
+  </nav>
+
+  <dialog id="help">
+    <h2>How to tie a knot</h2>
+    <ul>
+      <li><b>Draw</b> on the empty canvas to lay a rope. The end of the rope stays selected (blue).</li>
+      <li><b>Pull over:</b> draw across a rope and the new part passes over it.</li>
+      <li><b>Pull under:</b> with a part selected, start the stroke on the far side of a rope. The dashed line shows the part that will pass under everything in between.</li>
+      <li><b>Bight:</b> select the middle of a rope, then draw. A doubled strand is pulled out along the stroke.</li>
+      <li><b>Drag</b> any part of a rope to move it. The rest follows.</li>
+      <li><b>Fix:</b> double-click a part of a rope to hold it in place like a second hand (red). Double-click again to release it.</li>
+      <li><b>Cut:</b> right-click the rope, or pick the Cut tool and tap it.</li>
+      <li><b>Loosen:</b> double-click and hold in a gap, or pick the Loosen tool and press in the gap.</li>
+      <li><b>Tighten</b> pulls the ends of the selected rope (or of every rope) outward until the knot jams. While it runs the button reads Pause. A fixed part stays where it is, so fix a loop you want to keep.</li>
+      <li>A part that is both selected and fixed is purple.</li>
+      <li>Tap the empty canvas to deselect, then draw to start another rope.</li>
+    </ul>
+    <h3>View</h3>
+    <ul>
+      <li>Mouse: right-drag rotates, Shift-right-drag pans, the wheel zooms.</li>
+      <li>Touch: two fingers pan and zoom; pick the Rotate view tool to turn the view.</li>
+    </ul>
+    <h3>Keys</h3>
+    <ul>
+      <li><kbd>T</kbd> or <kbd>Space</kbd> tighten / pause, <kbd>Ctrl/Cmd+Z</kbd> undo, <kbd>Esc</kbd> deselect.</li>
+    </ul>
+    <form method="dialog"><button autofocus>Close</button></form>
+  </dialog>
+
+  <script type="module" src="src/app.js"></script>
+</body>
+</html>

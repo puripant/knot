@@ -1,0 +1,17 @@
+path {
+  fill: none;
+  stroke: #000;
+  stroke-width: 3px;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+svg, canvas {
+	position: absolute;
+	top: 0;
+	left: 0;
+}
+
+svg {
+	z-index: 10;
+}

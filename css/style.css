@@ -1,0 +1,173 @@
+:root {
+  --paper: #f6f4ef;
+  --ink: #23262b;
+  --muted: #6b7078;
+  --panel: rgba(255, 255, 255, 0.92);
+  --line: #d9d5cc;
+  --accent: #2f6feb;
+  --stroke: #23262b;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #1c1e22;
+    --ink: #eceef1;
+    --muted: #9aa0a8;
+    --panel: rgba(40, 43, 49, 0.92);
+    --line: #3a3e46;
+    --accent: #6ea0ff;
+    --stroke: #eceef1;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  background: var(--paper);
+  color: var(--ink);
+  font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+#stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  order: 2;
+  touch-action: none;
+  cursor: crosshair;
+}
+
+#stage canvas, .layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.layer { pointer-events: none; }
+
+#stroke, #connector {
+  fill: none;
+  stroke: var(--stroke);
+  stroke-width: 6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.5;
+}
+
+#wedge {
+  fill: var(--accent);
+  fill-opacity: 0.12;
+  stroke: var(--accent);
+  stroke-dasharray: 4 4;
+}
+
+#hint, #count {
+  position: absolute;
+  margin: 0;
+  bottom: 10px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+#hint { left: 12px; right: 110px; }
+#count { right: 12px; font-variant-numeric: tabular-nums; }
+
+#toolbar {
+  order: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+
+button, select {
+  font: inherit;
+  color: inherit;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+button:hover { border-color: var(--muted); }
+button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+button:disabled { opacity: 0.4; cursor: default; }
+
+button[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+#tighten { min-width: 5.5em; }
+
+#examples { width: 8.5em; }
+#more { width: 6em; }
+
+.select {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+
+dialog {
+  max-width: min(560px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  padding: 20px 24px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+  color: var(--ink);
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+dialog::backdrop { background: rgba(0, 0, 0, 0.4); }
+dialog h2 { margin: 0 0 8px; font-size: 18px; }
+dialog h3 { margin: 14px 0 4px; font-size: 14px; }
+dialog ul { margin: 0; padding-left: 18px; }
+dialog li { margin: 4px 0; }
+dialog form { margin-top: 16px; text-align: right; }
+
+kbd {
+  padding: 1px 5px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font: inherit;
+}
+
+/* Phones: the tools move under the thumb. */
+@media (max-width: 720px) {
+  #toolbar {
+    order: 3;
+    justify-content: center;
+    border-bottom: 0;
+    border-top: 1px solid var(--line);
+    padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+  }
+  button, select { min-height: 44px; padding: 0 10px; }
+  .select { font-size: 0; gap: 0; }
+  .select select { font-size: 14px; }
+  #hint { right: 12px; bottom: 8px; font-size: 13px; }
+  #count { bottom: auto; top: 8px; }
+}

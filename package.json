@@ -1,0 +1,11 @@
+{
+  "name": "knotjs",
+  "version": "1.0.0",
+  "description": "An interactive system for knot design: sketch-based interface plus physical simulation",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "python3 -m http.server 8080 --bind 127.0.0.1",
+    "test": "node --test"
+  }
+}
