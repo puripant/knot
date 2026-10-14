@@ -13,68 +13,123 @@ const STRANDS = 3; // strands of the laid rope
 const LAY = 2.6; // rope length, in radii, over which a strand moves on by one
 
 // Rope textures are drawn into canvases. Along u a texture repeats once per
-// lay; v runs once around the rope. `shade(u, v)` returns [r, g, b] in 0..1.
-function texture(shade, colour) {
-  const size = 256;
+// lay; v runs once around the rope.
+const DETAIL = 1024; // texture size for rope surfaces
+
+function canvasTexture(size, fill, colour) {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = size;
   const context = canvas.getContext('2d');
   const image = context.createImageData(size, size);
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const rgb = shade(x / size, y / size).map((value) => 255 * Math.max(0, Math.min(1, value)));
-      image.data.set([...rgb, 255], 4 * (y * size + x));
-    }
-  }
+  fill(image.data);
   context.putImageData(image, 0, 0);
   const result = new THREE.CanvasTexture(canvas);
   result.wrapS = result.wrapT = THREE.RepeatWrapping;
-  result.anisotropy = 4;
+  result.anisotropy = 8;
   if (colour) result.colorSpace = THREE.SRGBColorSpace;
   return result;
 }
 
-const grey = (value) => [value, value, value];
 const fract = (value) => value - Math.floor(value);
 
-// Three strands twisted together.
+// A periodic function of one variable, tabulated once: rope textures need
+// millions of samples and Math.sin with a power is slow at that count.
+function periodic(f, steps = 4096) {
+  const table = Float32Array.from({ length: steps }, (_, i) => f(i / steps));
+  return (t) => table[Math.floor(fract(t) * steps)];
+}
+const crownOf = periodic((t) => Math.sin(Math.PI * t) ** 0.6); // 0 in a groove, 1 on a strand's crown
+const wave = periodic((t) => 0.5 + 0.5 * Math.sin(2 * Math.PI * t));
+
+// Maps for a rope surface described by `surface(u, v, out)`, which writes
+// [height, r, g, b] into `out`: height 0 at the bottom of a groove and 1 on the
+// crown of a strand, colour in 0..1. The heights are sampled once; the normal
+// map holds the exact slope of that surface, `depth` radii deep, so the strands
+// stay crisp however deep they are. Grooves are also painted darker and rougher.
+function surfaceMaps(surface, depth) {
+  const size = DETAIL, count = size * size;
+  const height = new Float32Array(count), colour = new Float32Array(3 * count), out = [0, 0, 0, 0];
+  for (let y = 0, i = 0; y < size; y++) {
+    for (let x = 0; x < size; x++, i++) {
+      surface(x / size, y / size, out);
+      height[i] = out[0];
+      colour[3 * i] = out[1]; colour[3 * i + 1] = out[2]; colour[3 * i + 2] = out[3];
+    }
+  }
+  // Slope per unit of height step: u spans one lay along the rope, v the
+  // whole way around it, both measured in rope radii.
+  const along = (depth * size) / (2 * LAY), around = (depth * size) / (2 * 2 * Math.PI);
+  const normalMap = canvasTexture(size, (data) => {
+    for (let y = 0, i = 0; y < size; y++) {
+      const up = ((y + size - 1) % size) * size, down = ((y + 1) % size) * size;
+      for (let x = 0; x < size; x++, i++) {
+        const left = (x + size - 1) % size, right = (x + 1) % size;
+        const nx = -(height[y * size + right] - height[y * size + left]) * along;
+        const ny = -(height[down + x] - height[up + x]) * around;
+        const length = Math.sqrt(nx * nx + ny * ny + 1);
+        data[4 * i] = 255 * (0.5 + 0.5 * nx / length);
+        data[4 * i + 1] = 255 * (0.5 + 0.5 * ny / length);
+        data[4 * i + 2] = 255 * (0.5 + 0.5 / length);
+        data[4 * i + 3] = 255;
+      }
+    }
+  });
+  const map = canvasTexture(size, (data) => {
+    for (let i = 0; i < count; i++) {
+      const shade = (0.6 + 0.4 * height[i]) * (0.97 + 0.06 * fract(Math.sin(i * 12.9898) * 43758.5453));
+      data[4 * i] = 255 * colour[3 * i] * shade;
+      data[4 * i + 1] = 255 * colour[3 * i + 1] * shade;
+      data[4 * i + 2] = 255 * colour[3 * i + 2] * shade;
+      data[4 * i + 3] = 255;
+    }
+  }, true);
+  const roughnessMap = canvasTexture(size, (data) => {
+    for (let i = 0; i < count; i++) {
+      data[4 * i] = data[4 * i + 1] = data[4 * i + 2] = 255 * (1 - 0.3 * height[i]);
+      data[4 * i + 3] = 255;
+    }
+  });
+  return { map, normalMap, roughnessMap };
+}
+
+// Three strands twisted together, each made of finer yarns.
 function twistedMaps() {
-  const crown = (u, v) => Math.sin(Math.PI * fract(u + STRANDS * v)) ** 0.7; // 0 in the groove between strands
-  const yarn = (u, v) => 0.5 + 0.5 * Math.sin(2 * Math.PI * (10 * u - 3 * STRANDS * v)); // fibres within a strand
-  return {
-    map: texture((u, v) => grey((0.45 + 0.55 * crown(u, v)) * (0.92 + 0.08 * yarn(u, v)) + (Math.random() - 0.5) * 0.06), true),
-    bumpMap: texture((u, v) => grey(0.92 * crown(u, v) + 0.08 * yarn(u, v))),
-  };
+  return surfaceMaps((u, v, out) => {
+    out[0] = crownOf(u + STRANDS * v) * (0.9 + 0.1 * wave(10 * u - 3 * STRANDS * v));
+    out[1] = out[2] = out[3] = 1;
+  }, 0.55);
 }
 
 // A braided sheath: two sets of strands running opposite ways around the
 // rope, each passing over and under the other, every other strand lighter.
 function braidedMaps() {
-  const strand = (u, v) => {
+  return surfaceMaps((u, v, out) => {
     const a = 2 * u + 6 * v, b = 2 * u - 6 * v;
     const top = (Math.floor(a) + Math.floor(b)) % 2 === 0 ? a : b; // which set is on top here
-    return { crown: Math.sin(Math.PI * fract(top)) ** 0.6, light: Math.abs(Math.floor(top)) % 2 === 1 && top === a };
-  };
-  return {
-    map: texture((u, v) => {
-      const { crown, light } = strand(u, v);
-      const tone = 0.5 + 0.5 * crown + (Math.random() - 0.5) * 0.05;
-      return (light ? [0.93, 0.9, 0.82] : [0.2, 0.42, 0.6]).map((channel) => channel * tone);
-    }, true),
-    bumpMap: texture((u, v) => grey(strand(u, v).crown)),
-  };
+    const light = Math.abs(Math.floor(top)) % 2 === 1 && top === a;
+    out[0] = crownOf(top);
+    [out[1], out[2], out[3]] = light ? [0.93, 0.9, 0.82] : [0.2, 0.42, 0.6];
+  }, 0.3);
 }
 
 // A satin ribbon: smooth along its length, with a slightly darker selvage on
 // each side.
 function ribbonMaps() {
-  return { map: texture((u, v) => grey(v < 0.06 || v > 0.94 ? 0.82 : 1), true) };
+  const size = 64;
+  return {
+    map: canvasTexture(size, (data) => {
+      for (let y = 0, i = 0; y < size; y++) {
+        const tone = 255 * (y < 0.06 * size || y > 0.94 * size ? 0.82 : 1);
+        for (let x = 0; x < size; x++, i++) data.set([tone, tone, tone, 255], 4 * i);
+      }
+    }, true),
+  };
 }
 
 // How each view draws a rope: its shape, colour and textures.
 const STYLES = {
-  twisted: { shape: 'tube', color: '#e6cda3', maps: twistedMaps, bumpScale: 2.5 },
-  braided: { shape: 'tube', color: '#ffffff', maps: braidedMaps, bumpScale: 1.5 },
+  twisted: { shape: 'tube', color: '#e6cda3', maps: twistedMaps, roughness: 1 },
+  braided: { shape: 'tube', color: '#ffffff', maps: braidedMaps, roughness: 1 },
   plain: { shape: 'tube', color: '#e9e2d0', roughness: 0.6 },
   ribbon: { shape: 'ribbon', color: '#c9594b', maps: ribbonMaps, roughness: 0.45 },
   spheres: { shape: 'spheres', color: '#e6cda3', roughness: 0.6 },
@@ -86,7 +141,7 @@ function styleMaterial(mode) {
   if (style.maps && !mapCache.has(mode)) mapCache.set(mode, style.maps());
   return new THREE.MeshStandardMaterial({
     color: style.color, roughness: style.roughness ?? 0.85, metalness: 0, side: THREE.DoubleSide,
-    ...(style.maps ? { ...mapCache.get(mode), bumpScale: style.bumpScale ?? 1 } : {}),
+    ...(style.maps ? mapCache.get(mode) : {}),
   });
 }
 
